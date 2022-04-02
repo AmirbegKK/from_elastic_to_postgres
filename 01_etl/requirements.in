@@ -1,0 +1,4 @@
+backoff
+elasticsearch
+psycopg2-binary
+redis

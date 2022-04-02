@@ -1,0 +1,58 @@
+version: '3'
+
+services:
+  backend:
+    container_name: etl
+    build:
+      context: .
+    environment:
+      - DB_NAME
+      - DB_USER
+      - DB_PASSWORD
+      - DB_HOST
+      - DB_PORT
+      - REDIS_PORT
+      - REDIS_HOST
+    depends_on:
+      - postgres
+      - elastic
+
+  postgres:
+    container_name: postgresy
+    image: postgres:13
+    expose:
+      - $DB_PORT
+    restart: always
+    volumes:
+      -  $HOME/postgresql/data:/var/lib/postgresql/data
+    environment: 
+      POSTGRES_PASSWORD: $DB_PASSWORD
+      POSTGRES_USER: $DB_USER
+      POSTGRES_DB: $DB_NAME
+
+  elastic:
+    container_name: elastic
+    image: elasticsearch:8.0.1
+    expose: 
+      - $ELASTIC_PORT
+    restart: always
+    volumes:
+      - elastic_volume:/usr/share/elasticsearch/data
+    environment:
+      - "discovery.type=single-node"
+      - "ES_JAVA_OPTS=-Xms200m -Xmx200m"
+
+  redis:
+    image: redis:6.2.5-buster
+    container_name: redisq
+    restart: always
+    expose:
+      - $REDIS_PORT
+    environment:
+      - TZ=Europe/Moscow
+    volumes:
+      - redis:/data
+
+volumes:
+  elastic_volume:
+  redis:

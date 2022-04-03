@@ -1,7 +1,6 @@
 import datetime
 from abc import abstractmethod
 from dataclasses import dataclass
-from operator import mod
 from typing import Any
 
 from redis import Redis
@@ -13,12 +12,13 @@ from etl_components import REDIS_HOST, REDIS_PORT
 class RedisStorage:
     def __init__(self):
         self.redis_adapter = Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
-    
+
     def save_state(self, key: str, value: Any) -> None:
         self.redis_adapter.set(key, value)
-    
+
     def retrieve_state(self) -> dict:
         return self.redis_adapter
+
 
 class State:
 
@@ -44,7 +44,7 @@ class Extractor:
         self.required_ids = []
         self.query = ""
         self.cur = self.connection.cursor()
-        storage  = RedisStorage()
+        storage = RedisStorage()
         self.state = State(storage)
         self.batch_size = 100
 
@@ -56,7 +56,7 @@ class Extractor:
         if self.table != 'film_work':
             enricher = PostgresEnricher(self.connection, self.table)
             ids = enricher.extract(ids)
-        
+
         merger = PostgresMerger(self.connection, self.table)
         return merger.extract(ids)
 
@@ -65,7 +65,7 @@ class Extractor:
 class PostgresProducer(Extractor):
     def extract(self) -> list:
 
-        if (modified:= self.state.get_state(f'{self.table}_modified')) is None:
+        if (modified := self.state.get_state(f'{self.table}_modified')) is None:
             modified = datetime.datetime(1970, 1, 1)
         else:
             modified = datetime.datetime.fromisoformat(modified)
@@ -74,7 +74,7 @@ class PostgresProducer(Extractor):
         FROM content.{self.table}
         WHERE modified > (%s)
         ORDER BY modified
-        LIMIT {self.batch_size}; 
+        LIMIT {self.batch_size};
         """
 
         self.cur.execute(self.query, (modified,))
@@ -83,16 +83,17 @@ class PostgresProducer(Extractor):
         self.required_ids.extend([row[0] for row in data])
         return self.required_ids
 
+
 @dataclass
 class PostgresEnricher(Extractor):
-    
+
     def extract(self, ids: list) -> list:
         self.query = f"""
         SELECT fw.id, fw.modified
         FROM content.film_work fw
         LEFT JOIN content.{self.table}_film_work pgfw ON pgfw.film_work_id = fw.id
         WHERE pgfw.{self.table}_id::text = ANY(%s)
-        ORDER BY fw.modified; 
+        ORDER BY fw.modified;
         """
         self.cur.execute(self.query, (ids,))
         while data := self.cur.fetchmany(self.batch_size):
@@ -104,17 +105,17 @@ class PostgresEnricher(Extractor):
 class PostgresMerger(Extractor):
     def extract(self, ids: list) -> list:
 
-        self.query = f"""
+        self.query = """
         SELECT
-            fw.id as fw_id, 
-            fw.title, 
-            fw.description, 
-            fw.rating, 
-            fw.type, 
-            fw.created, 
-            fw.modified, 
-            pfw.role, 
-            p.id, 
+            fw.id as fw_id,
+            fw.title,
+            fw.description,
+            fw.rating,
+            fw.type,
+            fw.created,
+            fw.modified,
+            pfw.role,
+            p.id,
             p.full_name,
             g.name
         FROM content.film_work fw

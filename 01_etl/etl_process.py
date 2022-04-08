@@ -1,9 +1,10 @@
-from builtins import Exception
 import logging
+from builtins import Exception
 from contextlib import closing
 from time import sleep
 
 import backoff
+import elasticsearch
 import psycopg2
 from psycopg2.extensions import connection as _connection
 from psycopg2.extras import DictCursor
@@ -18,14 +19,14 @@ logger = logging.getLogger()
 TABLES = ('genre', 'person', 'film_work')
 
 
-@backoff.on_exception(backoff.expo, Exception, max_tries=3)
+@backoff.on_exception(backoff.expo, (elasticsearch.exceptions.ConnectionTimeout, elasticsearch.exceptions.ConnectionError), max_tries=3)
 def load(data: dict):
     logger.info('Starting loader ...')
     loader = Loader()
     return loader.load(data, 'movies')
 
 
-@backoff.on_exception(backoff.expo, Exception, max_tries=3)
+@backoff.on_exception(backoff.expo, (psycopg2.OperationalError, psycopg2.DatabaseError), max_tries=3)
 def transform(data):
     logger.info('Starting transformer ...')
     transformer = Transformer()

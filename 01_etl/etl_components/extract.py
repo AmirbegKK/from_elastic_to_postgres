@@ -6,7 +6,7 @@ from typing import Any
 from redis import Redis
 from psycopg2.extensions import connection as _connection
 
-from etl_components import REDIS_HOST, REDIS_PORT
+from config import REDIS_HOST, REDIS_PORT
 
 
 class RedisStorage:
@@ -46,7 +46,7 @@ class Extractor:
         self.cur = self.connection.cursor()
         storage = RedisStorage()
         self.state = State(storage)
-        self.batch_size = 100
+        self.batch_size = 10
 
     @abstractmethod
     def extract(self) -> list:
@@ -61,10 +61,8 @@ class Extractor:
         return merger.extract(ids)
 
 
-@dataclass
 class PostgresProducer(Extractor):
     def extract(self) -> list:
-
         if (modified := self.state.get_state(f'{self.table}_modified')) is None:
             modified = datetime.datetime(1970, 1, 1)
         else:
@@ -78,13 +76,12 @@ class PostgresProducer(Extractor):
         """
 
         self.cur.execute(self.query, (modified,))
-        data = self.cur.fetchall()
-        self.state.set_state(f'{self.table}_modified', str(data[-1][-1]))
+        if data := self.cur.fetchall():
+            self.state.set_state(f'{self.table}_modified', str(data[-1][-1])) 
         self.required_ids.extend([row[0] for row in data])
         return self.required_ids
 
 
-@dataclass
 class PostgresEnricher(Extractor):
 
     def extract(self, ids: list) -> list:
@@ -97,33 +94,72 @@ class PostgresEnricher(Extractor):
         """
         self.cur.execute(self.query, (ids,))
         while data := self.cur.fetchmany(self.batch_size):
+            print(data, self.table)
             self.required_ids.extend([row[0] for row in data])
         return self.required_ids
 
 
-@dataclass
 class PostgresMerger(Extractor):
     def extract(self, ids: list) -> list:
 
         self.query = """
         SELECT
+            dt.fw_id,
+            dt.title,
+            dt.description,
+            dt.rating,
+            dt.type,
+            ARRAY_AGG(dt.actors_names) FILTER (WHERE dt.actors_names IS NOT null) as actors_names,
+            ARRAY_AGG(dt.actors) FILTER (WHERE dt.actors IS NOT null) as actors,
+            ARRAY_AGG(dt.writers_names) FILTER(WHERE dt.writers_names IS NOT null) as writers_names,
+            ARRAY_AGG(dt.writers) FILTER (WHERE dt.writers IS NOT null) as writers,
+            ARRAY_AGG(distinct dt.director) FILTER(WHERE dt.director IS NOT null) as director,
+            dt.genres as genres
+        FROM
+        (SELECT
             fw.id as fw_id,
             fw.title,
             fw.description,
             fw.rating,
             fw.type,
-            fw.created,
-            fw.modified,
-            pfw.role,
-            p.id,
-            p.full_name,
-            g.name
+            CASE
+                WHEN pfw.role = 'actor' 
+                THEN ARRAY_AGG(distinct p.full_name)
+            END AS actors_names,
+            CASE
+                WHEN pfw.role = 'writer' 
+                THEN ARRAY_AGG(distinct p.full_name)
+            END AS writers_names,
+            CASE
+                WHEN pfw.role = 'director' 
+                THEN ARRAY_AGG(distinct p.full_name)
+            END AS director,
+            CASE
+                WHEN pfw.role = 'writer' 
+                THEN ARRAY_AGG(distinct p.id || ', ' || p.full_name)
+            END AS writers,
+            CASE
+                WHEN pfw.role = 'actor' 
+                THEN ARRAY_AGG(distinct p.id || ', ' || p.full_name)
+            END AS actors,
+            ARRAY_AGG(distinct g.name) genres
         FROM content.film_work fw
         LEFT JOIN content.person_film_work pfw ON pfw.film_work_id = fw.id
         LEFT JOIN content.person p ON p.id = pfw.person_id
         LEFT JOIN content.genre_film_work gfw ON gfw.film_work_id = fw.id
         LEFT JOIN content.genre g ON g.id = gfw.genre_id
-        WHERE fw.id::text = ANY(%s);
+        WHERE fw.id::text = ANY(%s)
+        GROUP BY 
+            fw.id,
+            fw.title,
+            pfw.role) dt
+        GROUP BY
+            dt.fw_id,
+            dt.title,
+            dt.description,
+            dt.rating,
+            dt.type,
+            dt.genres;
         """
 
         self.cur.execute(self.query, (ids,))

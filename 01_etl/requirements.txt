@@ -7,12 +7,10 @@
 backoff==1.11.1
     # via -r requirements.in
 certifi==2021.10.8
-    # via elastic-transport
+    # via elasticsearch
 deprecated==1.2.13
     # via redis
-elastic-transport==8.1.0
-    # via elasticsearch
-elasticsearch==8.1.0
+elasticsearch==7.17.0
     # via -r requirements.in
 packaging==21.3
     # via redis
@@ -23,6 +21,6 @@ pyparsing==3.0.7
 redis==4.1.4
     # via -r requirements.in
 urllib3==1.26.8
-    # via elastic-transport
+    # via elasticsearch
 wrapt==1.14.0
     # via deprecated

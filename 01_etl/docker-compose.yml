@@ -13,9 +13,12 @@ services:
       - DB_PORT
       - REDIS_PORT
       - REDIS_HOST
+      - ELASTIC_PORT
+      - ELASTIC_HOST
     depends_on:
       - postgres
       - elastic
+      - redis
 
   postgres:
     container_name: postgresy
@@ -32,15 +35,16 @@ services:
 
   elastic:
     container_name: elastic
-    image: elasticsearch:8.0.1
-    expose: 
-      - $ELASTIC_PORT
+    image: elasticsearch:7.17.1
+    ports: 
+      - 9200:9200
     restart: always
     volumes:
       - elastic_volume:/usr/share/elasticsearch/data
     environment:
-      - "discovery.type=single-node"
-      - "ES_JAVA_OPTS=-Xms200m -Xmx200m"
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms200m -Xmx200m
+      - xpack.security.enabled=false
 
   redis:
     image: redis:6.2.5-buster

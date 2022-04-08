@@ -35,4 +35,4 @@ jobs:
 
       # Runs a set of commands using the runners shell
       - name: Flake
-        run: flake8 --ignore S608 .
+        run: flake8 .

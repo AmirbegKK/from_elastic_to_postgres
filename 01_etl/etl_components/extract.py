@@ -3,10 +3,9 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
-from redis import Redis
-from psycopg2.extensions import connection as _connection
-
 from config import REDIS_HOST, REDIS_PORT
+from psycopg2.extensions import connection as _connection
+from redis import Redis
 
 
 class RedisStorage:
@@ -26,11 +25,11 @@ class State:
         self.storage = storage
 
     def set_state(self, key: str, value: Any) -> None:
-        """Установить состояние для определённого ключа"""
+        """Установить состояние для определённого ключа."""
         self.storage.save_state(key, value)
 
     def get_state(self, key: str) -> Any:
-        """Получить состояние по определённому ключу"""
+        """Получить состояние по определённому ключу."""
         state = self.storage.retrieve_state()
         return state.get(key)
 
@@ -42,7 +41,7 @@ class Extractor:
 
     def __post_init__(self):
         self.required_ids = []
-        self.query = ""
+        self.query = ''
         self.cur = self.connection.cursor()
         storage = RedisStorage()
         self.state = State(storage)
@@ -77,7 +76,7 @@ class PostgresProducer(Extractor):
 
         self.cur.execute(self.query, (modified,))
         if data := self.cur.fetchall():
-            self.state.set_state(f'{self.table}_modified', str(data[-1][-1])) 
+            self.state.set_state(f'{self.table}_modified', str(data[-1][-1]))
         self.required_ids.extend([row[0] for row in data])
         return self.required_ids
 
@@ -123,23 +122,23 @@ class PostgresMerger(Extractor):
             fw.rating,
             fw.type,
             CASE
-                WHEN pfw.role = 'actor' 
+                WHEN pfw.role = 'actor'
                 THEN ARRAY_AGG(distinct p.full_name)
             END AS actors_names,
             CASE
-                WHEN pfw.role = 'writer' 
+                WHEN pfw.role = 'writer'
                 THEN ARRAY_AGG(distinct p.full_name)
             END AS writers_names,
             CASE
-                WHEN pfw.role = 'director' 
+                WHEN pfw.role = 'director'
                 THEN ARRAY_AGG(distinct p.full_name)
             END AS director,
             CASE
-                WHEN pfw.role = 'writer' 
+                WHEN pfw.role = 'writer'
                 THEN ARRAY_AGG(distinct p.id || ', ' || p.full_name)
             END AS writers,
             CASE
-                WHEN pfw.role = 'actor' 
+                WHEN pfw.role = 'actor'
                 THEN ARRAY_AGG(distinct p.id || ', ' || p.full_name)
             END AS actors,
             ARRAY_AGG(distinct g.name) genres
@@ -149,7 +148,7 @@ class PostgresMerger(Extractor):
         LEFT JOIN content.genre_film_work gfw ON gfw.film_work_id = fw.id
         LEFT JOIN content.genre g ON g.id = gfw.genre_id
         WHERE fw.id::text = ANY(%s)
-        GROUP BY 
+        GROUP BY
             fw.id,
             fw.title,
             pfw.role) dt

@@ -1,6 +1,7 @@
 from elasticsearch import Elasticsearch, helpers
 from etl_components import ELASTIC_DSL
 
+
 class Loader:
 
     def __init__(self):

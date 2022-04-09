@@ -3,13 +3,15 @@ from abc import abstractmethod
 from dataclasses import dataclass
 
 from psycopg2.extensions import connection as _connection
-from state_config import RedisStorage, State
+from .state_config import RedisStorage, State
+
+
+TABLES = ('genre', 'person', 'film_work')
 
 
 @dataclass
 class Extractor:
     connection: _connection
-    table: str
 
     def __post_init__(self):
         self.required_ids = []
@@ -17,56 +19,65 @@ class Extractor:
         self.cur = self.connection.cursor()
         storage = RedisStorage()
         self.state = State(storage)
-        self.batch_size = 10
+        self.batch_size = 5
 
     @abstractmethod
     def extract(self) -> list:
-        producer = PostgresProducer(self.connection, self.table)
-        ids = producer.extract()
+        producer = PostgresProducer(self.connection)
+        films = producer.extract('film_work')
+        genres = producer.extract('genre')
+        persons = producer.extract('person')
 
-        if self.table != 'film_work':
-            enricher = PostgresEnricher(self.connection, self.table)
-            ids = enricher.extract(ids)
+        enricher = PostgresEnricher(self.connection)
+        films = enricher.extract('genre', films, genres)
+        films = enricher.extract('person', films, persons)
+        self.required_ids = [_[1] for _ in films]
 
-        merger = PostgresMerger(self.connection, self.table)
-        return merger.extract(ids)
+        merger = PostgresMerger(self.connection)
+        return merger.extract(self.required_ids)
 
 
 class PostgresProducer(Extractor):
-    def extract(self) -> list:
-        if (modified := self.state.get_state(f'{self.table}_modified')) is None:
+    def extract(self, table) -> list:
+        data = []
+        if (modified := self.state.get_state(f'{table}_modified')) is None:
             modified = datetime.datetime(1970, 1, 1)
         else:
             modified = datetime.datetime.fromisoformat(modified)
+        modified = datetime.datetime(1970, 1, 1)
         self.query = f"""
-        SELECT id, modified
-        FROM content.{self.table}
-        WHERE modified > (%s)
-        ORDER BY modified
-        LIMIT {self.batch_size};
-        """
-
+            SELECT id, modified
+            FROM content.{table}
+            WHERE modified > (%s)
+            ORDER BY modified
+            LIMIT {self.batch_size};
+            """
         self.cur.execute(self.query, (modified,))
         if data := self.cur.fetchall():
-            self.state.set_state(f'{self.table}_modified_temp', str(data[-1][-1]))
-        self.required_ids.extend([row[0] for row in data])
-        return self.required_ids
+            self.state.set_state(f'{table}_modified_temp', str(data[-1][-1]))
+            return data
 
 
 class PostgresEnricher(Extractor):
 
-    def extract(self, ids: list) -> list:
+    def extract(self, table: str, templ_data: list, data: list) -> list:
         self.query = f"""
-        SELECT fw.id, fw.modified
-        FROM content.film_work fw
-        LEFT JOIN content.{self.table}_film_work pgfw ON pgfw.film_work_id = fw.id
-        WHERE pgfw.{self.table}_id::text = ANY(%s)
-        ORDER BY fw.modified;
-        """
-        self.cur.execute(self.query, (ids,))
-        while data := self.cur.fetchmany(self.batch_size):
-            self.required_ids.extend([row[0] for row in data])
-        return self.required_ids
+            SELECT fw.id, fw.modified
+            FROM content.film_work fw
+            LEFT JOIN content.{table}_film_work pgfw ON pgfw.film_work_id = fw.id
+            WHERE pgfw.{table}_id::text = ANY(%s)
+            ORDER BY fw.modified;
+            """
+        self.cur.execute(self.query, ([row[0] for row in data],))
+
+        if data := self.cur.fetchall():
+            for row in data:
+                if row not in templ_data:
+                    templ_data.append(row)
+            #  Sort by moidifed
+            templ_data.sort(key=lambda film_info: film_info[1])
+        self.state.set_state(f'{table}_modified_temp', str(templ_data[-1][-1]))
+        return templ_data
 
 
 class PostgresMerger(Extractor):
@@ -74,19 +85,6 @@ class PostgresMerger(Extractor):
 
         self.query = """
         SELECT
-            dt.fw_id,
-            dt.title,
-            dt.description,
-            dt.rating,
-            dt.type,
-            ARRAY_AGG(dt.actors_names) FILTER (WHERE dt.actors_names IS NOT null) as actors_names,
-            ARRAY_AGG(dt.actors) FILTER (WHERE dt.actors IS NOT null) as actors,
-            ARRAY_AGG(dt.writers_names) FILTER(WHERE dt.writers_names IS NOT null) as writers_names,
-            ARRAY_AGG(dt.writers) FILTER (WHERE dt.writers IS NOT null) as writers,
-            ARRAY_AGG(distinct dt.director) FILTER(WHERE dt.director IS NOT null) as director,
-            dt.genres as genres
-        FROM
-        (SELECT
             fw.id as fw_id,
             fw.title,
             fw.description,
@@ -122,14 +120,7 @@ class PostgresMerger(Extractor):
         GROUP BY
             fw.id,
             fw.title,
-            pfw.role) dt
-        GROUP BY
-            dt.fw_id,
-            dt.title,
-            dt.description,
-            dt.rating,
-            dt.type,
-            dt.genres;
+            pfw.role;
         """
 
         self.cur.execute(self.query, (ids,))

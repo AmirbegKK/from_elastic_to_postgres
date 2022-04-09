@@ -1,6 +1,6 @@
 from elasticsearch import Elasticsearch, helpers
-from etl_components import ELASTIC_DSL
-from state_config import RedisStorage, State
+from .config import ELASTIC_DSL
+from .state_config import RedisStorage, State
 
 
 class Loader:

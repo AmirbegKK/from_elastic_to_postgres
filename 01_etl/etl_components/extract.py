@@ -1,9 +1,9 @@
 import datetime
 from abc import abstractmethod
 from dataclasses import dataclass
-from psycopg2.extensions import connection as _connection
 
-from state_config import State, RedisStorage
+from psycopg2.extensions import connection as _connection
+from state_config import RedisStorage, State
 
 
 @dataclass

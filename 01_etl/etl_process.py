@@ -18,10 +18,10 @@ TABLES = ('genre', 'person', 'film_work')
 
 
 @backoff.on_exception(backoff.expo, (es.exceptions.ConnectionTimeout, es.exceptions.ConnectionError), max_tries=3)
-def load(data: dict):
+def load(data: dict, table: str):
     logger.info('Starting loader ...')
     loader = Loader()
-    return loader.load(data, 'movies')
+    return loader.load(data, 'movies', table)
 
 
 @backoff.on_exception(backoff.expo, (psycopg2.OperationalError, psycopg2.DatabaseError), max_tries=3)
@@ -42,7 +42,7 @@ def extract(connection: _connection, table: str):
 def run_etl_process(table: str):
     logger.info(f'Starting etl process for {table}')
     with closing(psycopg2.connect(**DSL, cursor_factory=DictCursor)) as pg_conn:
-        load(transform(extract(pg_conn, table)))
+        load(transform(extract(pg_conn, table)), table)
 
 
 if __name__ == '__main__':

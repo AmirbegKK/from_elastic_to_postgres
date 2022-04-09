@@ -1,37 +1,9 @@
 import datetime
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import Any
-
-from config import REDIS_HOST, REDIS_PORT
 from psycopg2.extensions import connection as _connection
-from redis import Redis
 
-
-class RedisStorage:
-    def __init__(self):
-        self.redis_adapter = Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
-
-    def save_state(self, key: str, value: Any) -> None:
-        self.redis_adapter.set(key, value)
-
-    def retrieve_state(self) -> dict:
-        return self.redis_adapter
-
-
-class State:
-
-    def __init__(self, storage: RedisStorage):
-        self.storage = storage
-
-    def set_state(self, key: str, value: Any) -> None:
-        """Установить состояние для определённого ключа."""
-        self.storage.save_state(key, value)
-
-    def get_state(self, key: str) -> Any:
-        """Получить состояние по определённому ключу."""
-        state = self.storage.retrieve_state()
-        return state.get(key)
+from state_config import State, RedisStorage
 
 
 @dataclass
@@ -76,7 +48,7 @@ class PostgresProducer(Extractor):
 
         self.cur.execute(self.query, (modified,))
         if data := self.cur.fetchall():
-            self.state.set_state(f'{self.table}_modified', str(data[-1][-1]))
+            self.state.set_state(f'{self.table}_modified_temp', str(data[-1][-1]))
         self.required_ids.extend([row[0] for row in data])
         return self.required_ids
 
@@ -93,7 +65,6 @@ class PostgresEnricher(Extractor):
         """
         self.cur.execute(self.query, (ids,))
         while data := self.cur.fetchmany(self.batch_size):
-            print(data, self.table)
             self.required_ids.extend([row[0] for row in data])
         return self.required_ids
 

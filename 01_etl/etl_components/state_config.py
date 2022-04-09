@@ -1,7 +1,8 @@
 from typing import Any
 
-from .config import REDIS_HOST, REDIS_PORT
 from redis import Redis
+
+from .config import REDIS_HOST, REDIS_PORT
 
 
 class RedisStorage:

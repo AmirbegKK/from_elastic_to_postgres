@@ -3,8 +3,8 @@ from abc import abstractmethod
 from dataclasses import dataclass
 
 from psycopg2.extensions import connection as _connection
-from .state_config import RedisStorage, State
 
+from .state_config import RedisStorage, State
 
 TABLES = ('genre', 'person', 'film_work')
 

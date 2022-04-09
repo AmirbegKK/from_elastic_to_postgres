@@ -1,4 +1,5 @@
 from elasticsearch import Elasticsearch, helpers
+
 from .config import ELASTIC_DSL
 from .state_config import RedisStorage, State
 
